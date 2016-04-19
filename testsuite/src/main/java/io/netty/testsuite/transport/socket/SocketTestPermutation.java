@@ -22,9 +22,13 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.aio.AioEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.InternetProtocolFamily;
+import io.netty.channel.socket.aio.AioServerSocketChannel;
+import io.netty.channel.socket.aio.AioSocketChannel;
+import io.netty.channel.socket.aio.AioSocketChannelConfig;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -47,6 +51,7 @@ public class SocketTestPermutation {
     protected static final int WORKERS = 3;
 
     protected static final int OIO_SO_TIMEOUT = 10;  // Use short timeout for faster runs.
+    protected static final long AIO_TIMEOUT_MILLIS = 10000;  // Use short timeout for faster runs.
 
     protected final EventLoopGroup nioBossGroup =
             new NioEventLoopGroup(BOSSES, new DefaultThreadFactory("testsuite-nio-boss", true));
@@ -56,6 +61,11 @@ public class SocketTestPermutation {
             new OioEventLoopGroup(Integer.MAX_VALUE, new DefaultThreadFactory("testsuite-oio-boss", true));
     protected final EventLoopGroup oioWorkerGroup =
             new OioEventLoopGroup(Integer.MAX_VALUE, new DefaultThreadFactory("testsuite-oio-worker", true));
+
+    protected final EventLoopGroup aioBossGroup =
+            new AioEventLoopGroup(BOSSES, new DefaultThreadFactory("testsuite-aio-boss", true));
+    protected final EventLoopGroup aioWorkerGroup =
+            new AioEventLoopGroup(WORKERS, new DefaultThreadFactory("testsuite-aio-worker", true));
 
     protected <A extends AbstractBootstrap<?, ?>, B extends AbstractBootstrap<?, ?>>
     List<BootstrapComboFactory<A, B>> combo(List<BootstrapFactory<A>> sbfs, List<BootstrapFactory<B>> cbfs) {
@@ -143,6 +153,16 @@ public class SocketTestPermutation {
                 new BootstrapFactory<ServerBootstrap>() {
                     @Override
                     public ServerBootstrap newInstance() {
+                        return new ServerBootstrap().group(aioBossGroup, aioWorkerGroup)
+                                                    .channel(AioServerSocketChannel.class)
+                                                    .option(ChannelOption.AIO_READ_TIMEOUT, AIO_TIMEOUT_MILLIS)
+                                                    .option(ChannelOption.AIO_WRITE_TIMEOUT, AIO_TIMEOUT_MILLIS)
+                                                    .option(ChannelOption.ALLOW_HALF_CLOSURE, true);
+                    }
+                },
+                new BootstrapFactory<ServerBootstrap>() {
+                    @Override
+                    public ServerBootstrap newInstance() {
                         return new ServerBootstrap().group(oioBossGroup, oioWorkerGroup)
                                 .channel(OioServerSocketChannel.class)
                                 .option(ChannelOption.SO_TIMEOUT, OIO_SO_TIMEOUT);
@@ -157,6 +177,15 @@ public class SocketTestPermutation {
                     @Override
                     public Bootstrap newInstance() {
                         return new Bootstrap().group(nioWorkerGroup).channel(NioSocketChannel.class);
+                    }
+                },
+                new BootstrapFactory<Bootstrap>() {
+                    @Override
+                    public Bootstrap newInstance() {
+                        return new Bootstrap().group(aioWorkerGroup).channel(AioSocketChannel.class)
+                                .option(ChannelOption.AIO_READ_TIMEOUT, AIO_TIMEOUT_MILLIS)
+                                .option(ChannelOption.AIO_WRITE_TIMEOUT, AIO_TIMEOUT_MILLIS)
+                                .option(ChannelOption.ALLOW_HALF_CLOSURE, true);
                     }
                 },
                 new BootstrapFactory<Bootstrap>() {
